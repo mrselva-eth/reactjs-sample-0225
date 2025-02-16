@@ -1,5 +1,8 @@
 # Arakoo Task Manager (ATM)
 
+![image](https://github.com/user-attachments/assets/aced54c5-8ae2-4ac7-8ee8-ce18d44ae34a)
+
+
 Deployed link : https://atm-omega.vercel.app/auth
 
 ## Table of Contents
