@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Modal } from "@/components/ui/modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -36,13 +36,9 @@ export function EditTaskDialog({ task, isOpen, onClose, onSave }: EditTaskDialog
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] p-0 h-[80vh] max-h-[600px] flex flex-col">
-        <div className="px-6 py-4 border-b">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">Edit Task</DialogTitle>
-          </DialogHeader>
-        </div>
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Task">
+      <div className="sm:max-w-[600px] p-0 h-[80vh] max-h-[600px] flex flex-col">
+        <div className="px-6 py-4 border-b"></div>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-grow overflow-hidden">
           <div className="flex-grow overflow-y-auto px-6 py-4">
@@ -153,8 +149,8 @@ export function EditTaskDialog({ task, isOpen, onClose, onSave }: EditTaskDialog
             </div>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </Modal>
   )
 }
 

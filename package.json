@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.0",
     "@magic-ext/auth": "^1.0.0",
     "@magic-sdk/admin": "^2.4.1",
     "@magic-sdk/provider": "^21.4.1",

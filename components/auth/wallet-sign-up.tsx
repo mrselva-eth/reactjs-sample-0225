@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Modal } from "@/components/ui/modal"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -124,53 +124,48 @@ export function WalletSignUp({ address, onClose, onSuccess }: WalletSignUpProps)
   )
 
   return (
-    <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Set Username for Wallet Account</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2 relative">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              value={username}
-              onChange={(e) => {
-                const value = e.target.value
-                setUsername(value)
-                validateUsername(value)
-                checkUsernameAvailability(value) // Added call to checkUsernameAvailability
-              }}
-              onFocus={() => setIsUsernameFocused(true)}
-              onBlur={() => setTimeout(() => setIsUsernameFocused(false), 200)}
-              required
-              placeholder="Enter your username"
-              className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                !isUsernameAvailable && username ? "border-red-500" : "" // Added conditional class for red border
-              }`}
-            />
-            {isUsernameFocused && (
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-8 bg-white p-4 rounded-lg shadow-lg border border-gray-200 w-64 z-50">
-                <h3 className="font-semibold mb-2">Username Requirements:</h3>
-                <div className="space-y-2">
-                  <ValidationRule satisfied={usernameValidation.minLength} label="3-15 characters long" />
-                  <ValidationRule satisfied={usernameValidation.maxLength} label="Maximum 15 characters" />
-                  <ValidationRule satisfied={usernameValidation.validCharacters} label="Letters, numbers, _ or -" />
-                  <ValidationRule satisfied={usernameValidation.noSpaces} label="No spaces allowed" />
-                </div>
+    <Modal isOpen={true} onClose={onClose} title="Set Username for Wallet Account">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2 relative">
+          <Label htmlFor="username">Username</Label>
+          <Input
+            id="username"
+            value={username}
+            onChange={(e) => {
+              const value = e.target.value
+              setUsername(value)
+              validateUsername(value)
+              checkUsernameAvailability(value) // Added call to checkUsernameAvailability
+            }}
+            onFocus={() => setIsUsernameFocused(true)}
+            onBlur={() => setTimeout(() => setIsUsernameFocused(false), 200)}
+            required
+            placeholder="Enter your username"
+            className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
+              !isUsernameAvailable && username ? "border-red-500" : "" // Added conditional class for red border
+            }`}
+          />
+          {isUsernameFocused && (
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-8 bg-white p-4 rounded-lg shadow-lg border border-gray-200 w-64 z-50">
+              <h3 className="font-semibold mb-2">Username Requirements:</h3>
+              <div className="space-y-2">
+                <ValidationRule satisfied={usernameValidation.minLength} label="3-15 characters long" />
+                <ValidationRule satisfied={usernameValidation.maxLength} label="Maximum 15 characters" />
+                <ValidationRule satisfied={usernameValidation.validCharacters} label="Letters, numbers, _ or -" />
+                <ValidationRule satisfied={usernameValidation.noSpaces} label="No spaces allowed" />
               </div>
+            </div>
+          )}
+          {!isUsernameAvailable &&
+            username && ( // Added UI feedback for username availability
+              <p className="text-red-500 text-sm mt-1">Username is already taken</p>
             )}
-            {!isUsernameAvailable &&
-              username && ( // Added UI feedback for username availability
-                <p className="text-red-500 text-sm mt-1">Username is already taken</p>
-              )}
-          </div>
-          <Button type="submit" disabled={isLoading} className="w-full">
-            {isLoading ? "Creating Account..." : "Create Account"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+        <Button type="submit" disabled={isLoading} className="w-full">
+          {isLoading ? "Creating Account..." : "Create Account"}
+        </Button>
+      </form>
+    </Modal>
   )
 }
 
