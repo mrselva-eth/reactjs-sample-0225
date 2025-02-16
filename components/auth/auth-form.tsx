@@ -327,138 +327,136 @@ export function AuthForm({ mode }: AuthFormProps) {
     e.preventDefault()
     setIsLoading(true)
 
-    if (mode === "signup") {
-      if (!isValidEmail || !isEmailAvailable) {
-        toast({
-          title: "Error",
-          description: "Please enter a valid and available email address.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
+    if (!captchaToken) {
+      toast({
+        title: "Error",
+        description: "Please complete the reCAPTCHA.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+      return
+    }
 
-      if (!isUsernameAvailable) {
-        toast({
-          title: "Error",
-          description: "Please choose a different username.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      const isPasswordValid = Object.values(passwordValidation).every(Boolean)
-      if (!isPasswordValid) {
-        toast({
-          title: "Error",
-          description: "Please ensure your password meets all requirements.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      if (!passwordsMatch) {
-        toast({
-          title: "Error",
-          description: "Passwords do not match.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      if (!captchaToken) {
-        toast({
-          title: "Error",
-          description: "Please complete the reCAPTCHA.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      if (!isEmailVerified) {
-        toast({
-          title: "Error",
-          description: "Please verify your email before signing up.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      try {
-        if (mode === "signup") {
-          // Sign up process
-          const res = await fetch("/api/auth/signup", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              username,
-              email,
-              password,
-              captchaToken,
-              didToken,
-            }),
-          })
-
-          const data = await res.json()
-
-          if (!res.ok) {
-            throw new Error(data.error || "Signup failed")
-          }
-
+    try {
+      if (mode === "signup") {
+        if (!isValidEmail || !isEmailAvailable) {
           toast({
-            title: "Success",
-            description: "Account created successfully!",
+            title: "Error",
+            description: "Please enter a valid and available email address.",
+            variant: "destructive",
           })
-
-          // Redirect to login page after a short delay
-          setTimeout(() => {
-            router.push("/auth?mode=login&signupSuccess=true")
-          }, 3000)
-        } else {
-          // Login process
-          const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              username,
-              password,
-              captchaToken,
-            }),
-          })
-
-          const data = await res.json()
-
-          if (!res.ok) {
-            throw new Error(data.error || "Login failed")
-          }
-
-          toast({
-            title: "Success",
-            description: "Logged in successfully",
-          })
-
-          // Redirect to task manager page
-          router.push("/task-manager")
+          setIsLoading(false)
+          return
         }
-      } catch (error) {
-        console.error("Auth error:", error)
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Authentication failed",
-          variant: "destructive",
+
+        if (!isUsernameAvailable) {
+          toast({
+            title: "Error",
+            description: "Please choose a different username.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        const isPasswordValid = Object.values(passwordValidation).every(Boolean)
+        if (!isPasswordValid) {
+          toast({
+            title: "Error",
+            description: "Please ensure your password meets all requirements.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        if (!passwordsMatch) {
+          toast({
+            title: "Error",
+            description: "Passwords do not match.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        if (!isEmailVerified) {
+          toast({
+            title: "Error",
+            description: "Please verify your email before signing up.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        // Sign up process
+        const res = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username,
+            email,
+            password,
+            captchaToken,
+            didToken,
+          }),
         })
-      } finally {
-        setIsLoading(false)
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.error || "Signup failed")
+        }
+
+        toast({
+          title: "Success",
+          description: "Account created successfully!",
+        })
+
+        // Redirect to login page after a short delay
+        setTimeout(() => {
+          router.push("/auth?mode=login&signupSuccess=true")
+        }, 3000)
+      } else {
+        // Login process
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            identifier: username, // This can be either username or email
+            password,
+            captchaToken,
+          }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.error || "Login failed")
+        }
+
+        toast({
+          title: "Success",
+          description: "Logged in successfully",
+        })
+
+        // Redirect to task manager page
+        router.push("/task-manager")
       }
+    } catch (error) {
+      console.error("Auth error:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Authentication failed",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -506,13 +504,13 @@ export function AuthForm({ mode }: AuthFormProps) {
                   }}
                   onFocus={() => setIsUsernameFocused(true)}
                   onBlur={() => setTimeout(() => setIsUsernameFocused(false), 200)}
-                  placeholder="Enter your username"
+                  placeholder={mode === "login" ? "Enter your username or email" : "Enter your username"}
                   required
                   className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                    !isUsernameAvailable && username ? "border-red-500" : ""
+                    !isUsernameAvailable && username && mode === "signup" ? "border-red-500" : ""
                   }`}
                 />
-                {!isUsernameAvailable && username && (
+                {!isUsernameAvailable && username && mode === "signup" && (
                   <p className="text-red-500 text-sm mt-1">Username is already taken</p>
                 )}
               </div>
