@@ -1,5 +1,39 @@
-import axios from "axios"
+import axios, { type AxiosRequestConfig, type AxiosInstance } from "axios"
 import crypto from "crypto"
+
+interface CustomAxiosRequestConfig extends AxiosRequestConfig {
+  retry?: number
+  retryDelay?: number
+  retryCount?: number
+}
+
+const createAxiosInstance = (): AxiosInstance => {
+  const instance = axios.create()
+
+  instance.interceptors.response.use(undefined, async (error) => {
+    const config = error.config as CustomAxiosRequestConfig
+    if (!config || !config.retry) {
+      return Promise.reject(error)
+    }
+
+    config.retryCount = config.retryCount ?? 0
+
+    if (config.retryCount >= (config.retry ?? 0)) {
+      return Promise.reject(error)
+    }
+
+    config.retryCount += 1
+
+    const delayMs = config.retryDelay || 1000
+    await new Promise((resolve) => setTimeout(resolve, delayMs * 2 ** ((config.retryCount ?? 1) - 1)))
+
+    return instance(config)
+  })
+
+  return instance
+}
+
+const axiosInstance = createAxiosInstance()
 
 interface PinataFile {
   ipfs_pin_hash: string
@@ -46,13 +80,15 @@ export async function storeUserData(userData: UserData): Promise<string> {
   })
 
   try {
-    const response = await axios.post(url, data, {
+    const response = await axiosInstance.post(url, data, {
       headers: {
         "Content-Type": "application/json",
         pinata_api_key: process.env.NEXT_PUBLIC_PINATA_API_KEY,
         pinata_secret_api_key: process.env.NEXT_PUBLIC_PINATA_SECRET_API_KEY,
       },
-    })
+      retry: 3,
+      retryDelay: 1000,
+    } as CustomAxiosRequestConfig)
 
     return response.data.IpfsHash
   } catch (error) {
@@ -69,12 +105,14 @@ async function checkExistingUser(
   try {
     // Check all user data files
     const url = `https://api.pinata.cloud/data/pinList?metadata[keyvalues]={"type":{"value":"user_data","op":"eq"}}`
-    const response = await axios.get(url, {
+    const response = await axiosInstance.get(url, {
       headers: {
         pinata_api_key: process.env.NEXT_PUBLIC_PINATA_API_KEY,
         pinata_secret_api_key: process.env.NEXT_PUBLIC_PINATA_SECRET_API_KEY,
       },
-    })
+      retry: 3,
+      retryDelay: 1000,
+    } as CustomAxiosRequestConfig)
 
     // Fetch and check each file's content
     for (const file of response.data.rows) {
@@ -99,7 +137,10 @@ async function checkExistingUser(
 
 async function fetchIPFSData(hash: string): Promise<UserData> {
   try {
-    const response = await axios.get(`https://gateway.pinata.cloud/ipfs/${hash}`)
+    const response = await axiosInstance.get(`https://gateway.pinata.cloud/ipfs/${hash}`, {
+      retry: 3,
+      retryDelay: 1000,
+    } as CustomAxiosRequestConfig)
     return response.data
   } catch (error) {
     console.error("Error fetching IPFS data:", error)
@@ -111,18 +152,30 @@ export async function getUserData(identifier: string): Promise<UserData | null> 
   try {
     // Search by username, email, and wallet address
     const url = `https://api.pinata.cloud/data/pinList?metadata[keyvalues]={"type":{"value":"user_data","op":"eq"}}`
-    const response = await axios.get(url, {
+    const response = await axiosInstance.get(url, {
       headers: {
         pinata_api_key: process.env.NEXT_PUBLIC_PINATA_API_KEY,
         pinata_secret_api_key: process.env.NEXT_PUBLIC_PINATA_SECRET_API_KEY,
       },
-    })
+      retry: 3,
+      retryDelay: 1000,
+    } as CustomAxiosRequestConfig)
 
     // Check each file's content for matching username, email, or wallet address
     for (const file of response.data.rows) {
-      const userData = await fetchIPFSData(file.ipfs_pin_hash)
-      if (userData.username === identifier || userData.email === identifier || userData.walletAddress === identifier) {
-        return userData
+      try {
+        const userData = await fetchIPFSData(file.ipfs_pin_hash)
+        if (
+          userData.username === identifier ||
+          userData.email === identifier ||
+          userData.walletAddress === identifier
+        ) {
+          return userData
+        }
+      } catch (error) {
+        console.error(`Error fetching IPFS data for hash ${file.ipfs_pin_hash}:`, error)
+        // Continue to the next file if there's an error
+        continue
       }
     }
 

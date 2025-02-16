@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff, Check, X } from "lucide-react"
+import { Loader2, Eye, EyeOff, Check, X, CheckCircle } from "lucide-react"
 import type React from "react"
 import { useRouter } from "next/navigation"
 import ReCAPTCHA from "react-google-recaptcha"
@@ -71,6 +71,9 @@ export function AuthForm({ mode }: AuthFormProps) {
     validCharacters: false,
     noSpaces: false,
   })
+  const [isEmailVerified, setIsEmailVerified] = useState(false)
+  const [isVerifyingEmail, setIsVerifyingEmail] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
 
   const [magic, setMagic] = useState<Magic | null>(null)
 
@@ -168,17 +171,33 @@ export function AuthForm({ mode }: AuthFormProps) {
         description: "Authentication service is not available",
         variant: "destructive",
       })
-      return false
+      return
     }
 
+    setIsVerifyingEmail(true)
     try {
-      setIsVerifying(true)
-      const didToken = await magic.auth.loginWithEmailOTP({
-        email,
-        showUI: true,
-      })
-      setDidToken(didToken)
-      return true
+      const didToken = await magic.user.getIdToken()
+      if (didToken) {
+        const response = await fetch("/api/auth/verify-email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ didToken }),
+        })
+
+        if (response.ok) {
+          setIsEmailVerified(true)
+          setOtpSent(false)
+          setDidToken(didToken)
+          toast({
+            title: "Success",
+            description: "Email verified successfully!",
+          })
+        } else {
+          throw new Error("Email verification failed")
+        }
+      }
     } catch (error) {
       console.error("Email verification error:", error)
       toast({
@@ -186,9 +205,38 @@ export function AuthForm({ mode }: AuthFormProps) {
         description: "Failed to verify email. Please try again.",
         variant: "destructive",
       })
-      return false
     } finally {
-      setIsVerifying(false)
+      setIsVerifyingEmail(false)
+    }
+  }
+
+  const handleSendOTP = async () => {
+    if (!magic) {
+      toast({
+        title: "Error",
+        description: "Authentication service is not available",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsVerifyingEmail(true)
+      await magic.auth.loginWithMagicLink({ email })
+      setOtpSent(true)
+      toast({
+        title: "Success",
+        description: "Magic link sent to your email. Please check your inbox and click the link to verify.",
+      })
+    } catch (error) {
+      console.error("Error sending magic link:", error)
+      toast({
+        title: "Error",
+        description: "Failed to send verification email. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsVerifyingEmail(false)
     }
   }
 
@@ -279,68 +327,69 @@ export function AuthForm({ mode }: AuthFormProps) {
     e.preventDefault()
     setIsLoading(true)
 
-    if (mode === "signup") {
-      if (!isValidEmail || !isEmailAvailable) {
-        toast({
-          title: "Error",
-          description: "Please enter a valid and available email address.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      if (!isUsernameAvailable) {
-        toast({
-          title: "Error",
-          description: "Please choose a different username.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      const isPasswordValid = Object.values(passwordValidation).every(Boolean)
-      if (!isPasswordValid) {
-        toast({
-          title: "Error",
-          description: "Please ensure your password meets all requirements.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      if (!passwordsMatch) {
-        toast({
-          title: "Error",
-          description: "Passwords do not match.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      if (!captchaToken) {
-        toast({
-          title: "Error",
-          description: "Please complete the reCAPTCHA.",
-          variant: "destructive",
-        })
-        setIsLoading(false)
-        return
-      }
-
-      // Verify email before proceeding with signup
-      const isVerified = await handleEmailVerification()
-      if (!isVerified) {
-        setIsLoading(false)
-        return
-      }
+    if (!captchaToken) {
+      toast({
+        title: "Error",
+        description: "Please complete the reCAPTCHA.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+      return
     }
 
     try {
       if (mode === "signup") {
+        if (!isValidEmail || !isEmailAvailable) {
+          toast({
+            title: "Error",
+            description: "Please enter a valid and available email address.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        if (!isUsernameAvailable) {
+          toast({
+            title: "Error",
+            description: "Please choose a different username.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        const isPasswordValid = Object.values(passwordValidation).every(Boolean)
+        if (!isPasswordValid) {
+          toast({
+            title: "Error",
+            description: "Please ensure your password meets all requirements.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        if (!passwordsMatch) {
+          toast({
+            title: "Error",
+            description: "Passwords do not match.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        if (!isEmailVerified) {
+          toast({
+            title: "Error",
+            description: "Please verify your email before signing up.",
+            variant: "destructive",
+          })
+          setIsLoading(false)
+          return
+        }
+
         // Sign up process
         const res = await fetch("/api/auth/signup", {
           method: "POST",
@@ -379,7 +428,7 @@ export function AuthForm({ mode }: AuthFormProps) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            username,
+            identifier: username, // This can be either username or email
             password,
             captchaToken,
           }),
@@ -455,43 +504,67 @@ export function AuthForm({ mode }: AuthFormProps) {
                   }}
                   onFocus={() => setIsUsernameFocused(true)}
                   onBlur={() => setTimeout(() => setIsUsernameFocused(false), 200)}
-                  placeholder="Enter your username"
+                  placeholder={mode === "login" ? "Enter your username or email" : "Enter your username"}
                   required
                   className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                    !isUsernameAvailable && username ? "border-red-500" : ""
+                    !isUsernameAvailable && username && mode === "signup" ? "border-red-500" : ""
                   }`}
                 />
-                {!isUsernameAvailable && username && (
+                {!isUsernameAvailable && username && mode === "signup" && (
                   <p className="text-red-500 text-sm mt-1">Username is already taken</p>
                 )}
               </div>
               {mode === "signup" && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 relative">
                   <Label htmlFor="email" className="block text-left">
                     Email
                   </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value)
-                      validateEmail(e.target.value)
-                      if (mode === "signup") {
-                        checkEmailAvailability(e.target.value)
-                      }
-                    }}
-                    placeholder="Enter your email id"
-                    required={mode === "signup"}
-                    className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                      (!isValidEmail || !isEmailAvailable) && email ? "border-red-500" : ""
-                    }`}
-                  />
+                  <div className="flex items-center">
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value)
+                        validateEmail(e.target.value)
+                        if (mode === "signup") {
+                          checkEmailAvailability(e.target.value)
+                        }
+                      }}
+                      placeholder="Enter your email id"
+                      required={mode === "signup"}
+                      className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
+                        (!isValidEmail || !isEmailAvailable) && email ? "border-red-500" : ""
+                      }`}
+                      disabled={isEmailVerified}
+                    />
+                    {mode === "signup" && !isEmailVerified && (
+                      <Button
+                        type="button"
+                        onClick={handleSendOTP}
+                        disabled={!isValidEmail || !isEmailAvailable || isVerifyingEmail}
+                        className="ml-2 whitespace-nowrap"
+                      >
+                        {isVerifyingEmail ? "Sending..." : otpSent ? "Resend" : "Send Verification"}
+                      </Button>
+                    )}
+                    {mode === "signup" && isEmailVerified && <CheckCircle className="ml-2 h-6 w-6 text-green-500" />}
+                  </div>
                   {!isValidEmail && email && (
                     <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
                   )}
                   {!isEmailAvailable && isValidEmail && email && (
                     <p className="text-red-500 text-sm mt-1">Email is already registered</p>
+                  )}
+                  {otpSent && !isEmailVerified && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600 mb-2">
+                        A verification link has been sent to your email. Please click the link to verify your email.
+                      </p>
+                      <Button type="button" onClick={handleEmailVerification} disabled={isVerifyingEmail}>
+                        {isVerifyingEmail ? "Verifying..." : "I've clicked the link"}
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}

@@ -71,9 +71,6 @@ export function CreateTaskDialog({ onTaskCreate }: CreateTaskDialogProps) {
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Create New Task">
         <div className="sm:max-w-[600px] p-0 h-[80vh] max-h-[600px] flex flex-col">
           <div className="px-6 py-4 border-b">
-            <div>
-              <div className="text-lg font-semibold">Create New Task</div>
-            </div>
             <Tabs value={category} onValueChange={(value) => setCategory(value as TaskCategory)} className="mt-4">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="personal">Personal</TabsTrigger>
