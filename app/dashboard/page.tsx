@@ -5,7 +5,7 @@ import TaskManagerContent from "@/app/task-manager/task-manager-content"
 import { getProfileImage } from "@/lib/profile"
 
 export default async function DashboardPage() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const userSession = cookieStore.get("user_session")
 
   if (!userSession) {

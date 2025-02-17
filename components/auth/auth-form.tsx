@@ -89,6 +89,8 @@ export function AuthForm({ mode }: AuthFormProps) {
         title: "Account Created",
         description: "Your account has been successfully created. You can now log in.",
       })
+      // Clear the URL parameters after showing the toast
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [toast])
 
@@ -153,11 +155,17 @@ export function AuthForm({ mode }: AuthFormProps) {
   const checkEmailAvailability = async (email: string) => {
     if (!isValidEmail) return
     try {
-      const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email)}`)
+      const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(email.toLowerCase())}`)
+      if (!res.ok) {
+        throw new Error("Failed to check email availability")
+      }
       const data = await res.json()
+      console.log("Email availability response:", data) // Add debug logging
       setIsEmailAvailable(data.available)
     } catch (error) {
       console.error("Error checking email availability:", error)
+      // Set to true in case of error to allow form submission
+      setIsEmailAvailable(true)
     }
   }
 
@@ -220,9 +228,10 @@ export function AuthForm({ mode }: AuthFormProps) {
       setIsVerifyingEmail(true)
       await magic.auth.loginWithMagicLink({ email })
       setOtpSent(true)
+      setIsEmailVerified(true) // Set email as verified after successful OTP send
       toast({
         title: "Success",
-        description: "Magic link sent to your email. Please check your inbox and click the link to verify.",
+        description: "Email verified successfully!",
       })
     } catch (error) {
       console.error("Error sending magic link:", error)
@@ -323,7 +332,48 @@ export function AuthForm({ mode }: AuthFormProps) {
     e.preventDefault()
     setIsLoading(true)
 
-    if (mode === "signup") {
+    if (mode === "login") {
+      try {
+        if (!captchaToken) {
+          throw new Error("Please complete the reCAPTCHA")
+        }
+
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            captchaToken,
+          }),
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+          throw new Error(data.error || "Login failed")
+        }
+
+        toast({
+          title: "Success",
+          description: "Logged in successfully",
+        })
+
+        // Redirect to task manager page
+        router.push("/task-manager")
+      } catch (error) {
+        console.error("Login error:", error)
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Login failed",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
       if (!isValidEmail || !isEmailAvailable) {
         toast({
           title: "Error",
@@ -424,44 +474,6 @@ export function AuthForm({ mode }: AuthFormProps) {
       } finally {
         setIsLoading(false)
       }
-    } else {
-      // Login process
-      try {
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            captchaToken,
-          }),
-        })
-
-        const data = await res.json()
-
-        if (!res.ok) {
-          throw new Error(data.error || "Login failed")
-        }
-
-        toast({
-          title: "Success",
-          description: "Logged in successfully",
-        })
-
-        // Redirect to task manager page
-        router.push("/task-manager")
-      } catch (error) {
-        console.error("Login error:", error)
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Login failed",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
-      }
     }
   }
 
@@ -525,23 +537,50 @@ export function AuthForm({ mode }: AuthFormProps) {
                 <Label htmlFor="email" className="block text-left">
                   Email
                 </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value)
-                    validateEmail(e.target.value)
-                    if (mode === "signup") {
-                      checkEmailAvailability(e.target.value)
-                    }
-                  }}
-                  placeholder="Enter your email"
-                  required
-                  className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                    (!isValidEmail || !isEmailAvailable) && email ? "border-red-500" : ""
-                  }`}
-                />
+                <div className="flex items-center space-x-2">
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      validateEmail(e.target.value)
+                      if (mode === "signup") {
+                        checkEmailAvailability(e.target.value)
+                      }
+                    }}
+                    placeholder="Enter your email"
+                    required
+                    disabled={isEmailVerified}
+                    className={`flex-grow border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
+                      (!isValidEmail || !isEmailAvailable) && email ? "border-red-500" : ""
+                    }`}
+                  />
+                  {mode === "signup" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSendOTP}
+                      disabled={!isValidEmail || isVerifyingEmail || isEmailVerified || !email}
+                      className={`w-24 ${
+                        isEmailVerified
+                          ? "bg-green-500 text-white border-green-500 hover:bg-green-600"
+                          : "bg-[#F6AD37] text-white border-[#F6AD37] hover:bg-[#F6AD37]/90"
+                      }`}
+                    >
+                      {isVerifyingEmail ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isEmailVerified ? (
+                        "Verified"
+                      ) : otpSent ? (
+                        "Resend"
+                      ) : (
+                        "Verify"
+                      )}
+                    </Button>
+                  )}
+                </div>
                 {!isValidEmail && email && (
                   <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
                 )}

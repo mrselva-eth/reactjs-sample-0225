@@ -19,8 +19,9 @@ export function Dashboard({ identifier }: DashboardProps) {
 
   useEffect(() => {
     const fetchTaskStats = async () => {
-      const tasks = await getUserTasks(identifier)
-      const stats = tasks.reduce(
+      const { personalTasks, companyTasks } = await getUserTasks(identifier)
+      const allTasks = [...personalTasks, ...companyTasks]
+      const stats = allTasks.reduce(
         (acc, task) => {
           acc.total++
           if (task.status === "completed") acc.completed++
