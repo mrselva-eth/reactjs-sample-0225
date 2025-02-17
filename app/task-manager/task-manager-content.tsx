@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
@@ -183,7 +183,9 @@ export default function TaskManagerContent({ profileImage, children }: TaskManag
         </div>
       </header>
       <main className="flex-1 container mx-auto px-4 overflow-hidden">
-        {children || (
+        {children ? (
+          React.cloneElement(children as React.ReactElement, { searchQuery })
+        ) : (
           <TaskManager identifier={user.walletAddress || user.email || user.username} searchQuery={searchQuery} />
         )}
       </main>

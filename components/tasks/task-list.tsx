@@ -14,7 +14,7 @@ interface TaskListProps {
   tasks: Task[]
   category: "personal" | "company"
   searchQuery: string
-  onTaskUpdate: (updatedTask: Task) => void
+  onTaskUpdate: (updatedTask: Task) => Promise<void>
 }
 
 export function TaskList({ tasks, category, searchQuery, onTaskUpdate }: TaskListProps) {
@@ -23,15 +23,21 @@ export function TaskList({ tasks, category, searchQuery, onTaskUpdate }: TaskLis
   const filteredTasks = tasks.filter((task) => task.category === category)
 
   useEffect(() => {
-    if (searchQuery && listRef.current) {
-      const matchingTask = filteredTasks.find((task) => task.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    if (searchQuery) {
+      const timer = setTimeout(() => {
+        const matchingTasks = filteredTasks.filter((task) =>
+          task.title.toLowerCase().includes(searchQuery.toLowerCase()),
+        )
 
-      if (matchingTask) {
-        const taskElement = document.getElementById(`task-${matchingTask.id}`)
-        if (taskElement) {
-          taskElement.scrollIntoView({ behavior: "smooth", block: "center" })
+        if (matchingTasks.length > 0 && listRef.current) {
+          const firstMatch = document.getElementById(`task-${matchingTasks[0].id}`)
+          if (firstMatch) {
+            firstMatch.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
         }
-      }
+      }, 300)
+
+      return () => clearTimeout(timer)
     }
   }, [searchQuery, filteredTasks])
 
@@ -51,16 +57,18 @@ export function TaskList({ tasks, category, searchQuery, onTaskUpdate }: TaskLis
   const highlightSearchText = (text: string) => {
     if (!searchQuery) return text
 
-    const parts = text.split(new RegExp(`(${searchQuery})`, "gi"))
+    const regex = new RegExp(`(${searchQuery})`, "gi")
+    const parts = text.split(regex)
+
     return (
       <>
         {parts.map((part, i) =>
-          part.toLowerCase() === searchQuery.toLowerCase() ? (
+          regex.test(part) ? (
             <span key={i} className="bg-yellow-200 dark:bg-yellow-800 px-1 rounded">
               {part}
             </span>
           ) : (
-            part
+            <span key={i}>{part}</span>
           ),
         )}
       </>
@@ -84,7 +92,7 @@ export function TaskList({ tasks, category, searchQuery, onTaskUpdate }: TaskLis
               className={cn(
                 "hover:shadow-md transition-shadow",
                 task.title.toLowerCase().includes(searchQuery.toLowerCase()) && searchQuery
-                  ? "ring-2 ring-[#F6AD37]"
+                  ? "ring-2 ring-[#F6AD37] shadow-lg transform scale-[1.02] transition-all"
                   : "",
               )}
             >

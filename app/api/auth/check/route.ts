@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import clientPromise from "@/lib/mongodb"
 
 export async function GET() {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const userSession = cookieStore.get("user_session")
 
   if (!userSession) {

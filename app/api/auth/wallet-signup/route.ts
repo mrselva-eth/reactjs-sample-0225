@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     }
 
     // Set session cookie
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     cookieStore.set("user_session", username, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

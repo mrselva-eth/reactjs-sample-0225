@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CreateTaskDialog } from "./create-task-dialog"
 import { TaskList } from "./task-list"
 import type { Task } from "@/types/task"
-import { getUserTasks, storeTasks, updateTaskStatus } from "@/lib/tasks"
+import { updateTaskStatus, getUserTasks, storeTasks } from "@/lib/tasks"
 import { useToast } from "@/components/ui/use-toast"
 
 export interface Notification {
@@ -20,7 +20,8 @@ interface TaskManagerProps {
 }
 
 export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
-  const [tasks, setTasks] = useState<Task[]>([])
+  const [personalTasks, setPersonalTasks] = useState<Task[]>([])
+  const [companyTasks, setCompanyTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"personal" | "company">("personal")
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -28,12 +29,12 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
   const [audio, setAudio] = useState<HTMLAudioElement | null>(null)
 
   const checkNotifications = useCallback(
-    (currentTasks: Task[]) => {
+    (tasks: Task[]) => {
       const now = new Date().getTime()
       const newNotifications: Notification[] = []
       const existingNotificationIds = new Set(notifications.map((n) => n.id))
 
-      currentTasks.forEach((task) => {
+      tasks.forEach((task) => {
         const dueTime = new Date(task.dueDate).getTime()
         const timeDiff = dueTime - now
 
@@ -82,12 +83,8 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
 
   useEffect(() => {
     if (searchQuery) {
-      const personalMatch = tasks.some(
-        (task) => task.category === "personal" && task.title.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-      const companyMatch = tasks.some(
-        (task) => task.category === "company" && task.title.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
+      const personalMatch = personalTasks.some((task) => task.title.toLowerCase().includes(searchQuery.toLowerCase()))
+      const companyMatch = companyTasks.some((task) => task.title.toLowerCase().includes(searchQuery.toLowerCase()))
 
       if (companyMatch && !personalMatch) {
         setActiveTab("company")
@@ -95,14 +92,14 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
         setActiveTab("personal")
       }
     }
-  }, [searchQuery, tasks])
+  }, [searchQuery, personalTasks, companyTasks])
 
   const removeExpiredNotifications = useCallback(() => {
     const now = new Date().getTime()
     setNotifications((prevNotifications) =>
       prevNotifications.filter((notification) => {
         const [taskId, type] = notification.id.split("-")
-        const task = tasks.find((t) => t.id === taskId)
+        const task = [...personalTasks, ...companyTasks].find((t) => t.id === taskId)
         if (!task) return false // Remove if task no longer exists
 
         const dueTime = new Date(task.dueDate).getTime()
@@ -114,14 +111,16 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
         return false
       }),
     )
-  }, [tasks])
+  }, [personalTasks, companyTasks])
 
   const loadTasks = async () => {
     try {
-      const userTasks = await getUserTasks(identifier)
-      const updatedTasks = userTasks.map(updateTaskStatus)
-      setTasks(updatedTasks)
-      checkNotifications(updatedTasks)
+      const { personalTasks, companyTasks } = await getUserTasks(identifier)
+      const updatedPersonalTasks = personalTasks.map(updateTaskStatus)
+      const updatedCompanyTasks = companyTasks.map(updateTaskStatus)
+      setPersonalTasks(updatedPersonalTasks)
+      setCompanyTasks(updatedCompanyTasks)
+      checkNotifications([...updatedPersonalTasks, ...updatedCompanyTasks])
       removeExpiredNotifications()
     } catch (error) {
       console.error("Error loading tasks:", error)
@@ -137,10 +136,21 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
 
   const handleCreateTask = async (taskData: Task) => {
     try {
-      const newTasks = [...tasks, taskData]
-      await storeTasks(identifier, newTasks)
-      setTasks(newTasks)
-      checkNotifications(newTasks)
+      const newTasks = taskData.category === "personal" ? [...personalTasks, taskData] : [...companyTasks, taskData]
+
+      await storeTasks(
+        identifier,
+        taskData.category === "personal" ? newTasks : personalTasks,
+        taskData.category === "company" ? newTasks : companyTasks,
+      )
+
+      if (taskData.category === "personal") {
+        setPersonalTasks(newTasks)
+      } else {
+        setCompanyTasks(newTasks)
+      }
+
+      checkNotifications([...personalTasks, ...companyTasks, taskData])
       toast({
         title: "Success",
         description: "Task created successfully",
@@ -157,10 +167,20 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
 
   const handleUpdateTask = async (updatedTask: Task) => {
     try {
-      const newTasks = tasks.map((task) => (task.id === updatedTask.id ? updatedTask : task))
-      await storeTasks(identifier, newTasks)
-      setTasks(newTasks)
-      checkNotifications(newTasks)
+      const newPersonalTasks =
+        updatedTask.category === "personal"
+          ? personalTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+          : personalTasks
+
+      const newCompanyTasks =
+        updatedTask.category === "company"
+          ? companyTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+          : companyTasks
+
+      await storeTasks(identifier, newPersonalTasks, newCompanyTasks)
+      setPersonalTasks(newPersonalTasks)
+      setCompanyTasks(newCompanyTasks)
+      checkNotifications([...newPersonalTasks, ...newCompanyTasks])
       toast({
         title: "Success",
         description: "Task updated successfully",
@@ -213,10 +233,20 @@ export function TaskManager({ identifier, searchQuery }: TaskManagerProps) {
           </TabsList>
           <div className="flex-1 overflow-hidden">
             <TabsContent value="personal" className="h-full overflow-y-auto mt-0 border-0">
-              <TaskList tasks={tasks} category="personal" searchQuery={searchQuery} onTaskUpdate={handleUpdateTask} />
+              <TaskList
+                tasks={personalTasks}
+                category="personal"
+                searchQuery={searchQuery}
+                onTaskUpdate={handleUpdateTask}
+              />
             </TabsContent>
             <TabsContent value="company" className="h-full overflow-y-auto mt-0 border-0">
-              <TaskList tasks={tasks} category="company" searchQuery={searchQuery} onTaskUpdate={handleUpdateTask} />
+              <TaskList
+                tasks={companyTasks}
+                category="company"
+                searchQuery={searchQuery}
+                onTaskUpdate={handleUpdateTask}
+              />
             </TabsContent>
           </div>
         </Tabs>
