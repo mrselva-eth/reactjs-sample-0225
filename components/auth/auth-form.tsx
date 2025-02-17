@@ -7,13 +7,12 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff, Check, X, CheckCircle } from "lucide-react"
+import { Loader2, Eye, EyeOff, Check, X } from "lucide-react"
 import type React from "react"
 import { useRouter } from "next/navigation"
 import ReCAPTCHA from "react-google-recaptcha"
 import { Magic } from "magic-sdk"
 import { ethers } from "ethers"
-import { WalletSignUp } from "./wallet-sign-up"
 
 interface AuthFormProps {
   mode: "signup" | "login"
@@ -60,9 +59,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [isUsernameAvailable, setIsUsernameAvailable] = useState(true)
   const [isEmailAvailable, setIsEmailAvailable] = useState(true)
   const [isVerifying, setIsVerifying] = useState(false)
-  const [didToken, setDidToken] = useState<string | null>(null)
   const router = useRouter()
-  const [isWalletSignUpOpen, setIsWalletSignUpOpen] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string | null>(null)
   const [isUsernameFocused, setIsUsernameFocused] = useState(false)
   const [usernameValidation, setUsernameValidation] = useState<UsernameValidation>({
@@ -189,7 +186,6 @@ export function AuthForm({ mode }: AuthFormProps) {
         if (response.ok) {
           setIsEmailVerified(true)
           setOtpSent(false)
-          setDidToken(didToken)
           toast({
             title: "Success",
             description: "Email verified successfully!",
@@ -323,74 +319,73 @@ export function AuthForm({ mode }: AuthFormProps) {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
-    if (!captchaToken) {
-      toast({
-        title: "Error",
-        description: "Please complete the reCAPTCHA.",
-        variant: "destructive",
-      })
-      setIsLoading(false)
-      return
-    }
+    if (mode === "signup") {
+      if (!isValidEmail || !isEmailAvailable) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid and available email address.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
-    try {
-      if (mode === "signup") {
-        if (!isValidEmail || !isEmailAvailable) {
-          toast({
-            title: "Error",
-            description: "Please enter a valid and available email address.",
-            variant: "destructive",
-          })
-          setIsLoading(false)
-          return
-        }
+      if (!isUsernameAvailable) {
+        toast({
+          title: "Error",
+          description: "Please choose a different username.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
-        if (!isUsernameAvailable) {
-          toast({
-            title: "Error",
-            description: "Please choose a different username.",
-            variant: "destructive",
-          })
-          setIsLoading(false)
-          return
-        }
+      const isPasswordValid = Object.values(passwordValidation).every(Boolean)
+      if (!isPasswordValid) {
+        toast({
+          title: "Error",
+          description: "Please ensure your password meets all requirements.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
-        const isPasswordValid = Object.values(passwordValidation).every(Boolean)
-        if (!isPasswordValid) {
-          toast({
-            title: "Error",
-            description: "Please ensure your password meets all requirements.",
-            variant: "destructive",
-          })
-          setIsLoading(false)
-          return
-        }
+      if (!passwordsMatch) {
+        toast({
+          title: "Error",
+          description: "Passwords do not match.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
-        if (!passwordsMatch) {
-          toast({
-            title: "Error",
-            description: "Passwords do not match.",
-            variant: "destructive",
-          })
-          setIsLoading(false)
-          return
-        }
+      if (!captchaToken) {
+        toast({
+          title: "Error",
+          description: "Please complete the reCAPTCHA.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
-        if (!isEmailVerified) {
-          toast({
-            title: "Error",
-            description: "Please verify your email before signing up.",
-            variant: "destructive",
-          })
-          setIsLoading(false)
-          return
-        }
+      if (!isEmailVerified) {
+        toast({
+          title: "Error",
+          description: "Please verify your email before signing up.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+        return
+      }
 
-        // Sign up process
+      try {
         const res = await fetch("/api/auth/signup", {
           method: "POST",
           headers: {
@@ -401,7 +396,6 @@ export function AuthForm({ mode }: AuthFormProps) {
             email,
             password,
             captchaToken,
-            didToken,
           }),
         })
 
@@ -420,15 +414,26 @@ export function AuthForm({ mode }: AuthFormProps) {
         setTimeout(() => {
           router.push("/auth?mode=login&signupSuccess=true")
         }, 3000)
-      } else {
-        // Login process
+      } catch (error) {
+        console.error("Signup error:", error)
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Signup failed",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // Login process
+      try {
         const res = await fetch("/api/auth/login", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            identifier: username, // This can be either username or email
+            email,
             password,
             captchaToken,
           }),
@@ -447,16 +452,16 @@ export function AuthForm({ mode }: AuthFormProps) {
 
         // Redirect to task manager page
         router.push("/task-manager")
+      } catch (error) {
+        console.error("Login error:", error)
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Login failed",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
-    } catch (error) {
-      console.error("Auth error:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Authentication failed",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -487,87 +492,63 @@ export function AuthForm({ mode }: AuthFormProps) {
           </TabsList>
           <TabsContent value="email" className="mt-0">
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="username" className="block text-left">
-                  Username
-                </Label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setUsername(value)
-                    if (mode === "signup") {
-                      validateUsername(value)
-                      checkUsernameAvailability(value)
-                    }
-                  }}
-                  onFocus={() => setIsUsernameFocused(true)}
-                  onBlur={() => setTimeout(() => setIsUsernameFocused(false), 200)}
-                  placeholder={mode === "login" ? "Enter your username or email" : "Enter your username"}
-                  required
-                  className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                    !isUsernameAvailable && username && mode === "signup" ? "border-red-500" : ""
-                  }`}
-                />
-                {!isUsernameAvailable && username && mode === "signup" && (
-                  <p className="text-red-500 text-sm mt-1">Username is already taken</p>
-                )}
-              </div>
               {mode === "signup" && (
-                <div className="space-y-1.5 relative">
-                  <Label htmlFor="email" className="block text-left">
-                    Email
+                <div className="space-y-1.5">
+                  <Label htmlFor="username" className="block text-left">
+                    Username
                   </Label>
-                  <div className="flex items-center">
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value)
-                        validateEmail(e.target.value)
-                        if (mode === "signup") {
-                          checkEmailAvailability(e.target.value)
-                        }
-                      }}
-                      placeholder="Enter your email id"
-                      required={mode === "signup"}
-                      className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
-                        (!isValidEmail || !isEmailAvailable) && email ? "border-red-500" : ""
-                      }`}
-                      disabled={isEmailVerified}
-                    />
-                    {mode === "signup" && !isEmailVerified && (
-                      <Button
-                        type="button"
-                        onClick={handleSendOTP}
-                        disabled={!isValidEmail || !isEmailAvailable || isVerifyingEmail}
-                        className="ml-2 whitespace-nowrap"
-                      >
-                        {isVerifyingEmail ? "Sending..." : otpSent ? "Resend" : "Send Verification"}
-                      </Button>
-                    )}
-                    {mode === "signup" && isEmailVerified && <CheckCircle className="ml-2 h-6 w-6 text-green-500" />}
-                  </div>
-                  {!isValidEmail && email && (
-                    <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
-                  )}
-                  {!isEmailAvailable && isValidEmail && email && (
-                    <p className="text-red-500 text-sm mt-1">Email is already registered</p>
-                  )}
-                  {otpSent && !isEmailVerified && (
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-600 mb-2">
-                        A verification link has been sent to your email. Please click the link to verify your email.
-                      </p>
-                      <Button type="button" onClick={handleEmailVerification} disabled={isVerifyingEmail}>
-                        {isVerifyingEmail ? "Verifying..." : "I've clicked the link"}
-                      </Button>
-                    </div>
+                  <Input
+                    id="username"
+                    value={username}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setUsername(value)
+                      if (mode === "signup") {
+                        validateUsername(value)
+                        checkUsernameAvailability(value)
+                      }
+                    }}
+                    onFocus={() => setIsUsernameFocused(true)}
+                    onBlur={() => setTimeout(() => setIsUsernameFocused(false), 200)}
+                    placeholder="Enter your username"
+                    required
+                    className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
+                      !isUsernameAvailable && username ? "border-red-500" : ""
+                    }`}
+                  />
+                  {!isUsernameAvailable && username && (
+                    <p className="text-red-500 text-sm mt-1">Username is already taken</p>
                   )}
                 </div>
               )}
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="block text-left">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value)
+                    validateEmail(e.target.value)
+                    if (mode === "signup") {
+                      checkEmailAvailability(e.target.value)
+                    }
+                  }}
+                  placeholder="Enter your email"
+                  required
+                  className={`border-gray-200 focus:border-[#F6AD37] focus:ring-[#F6AD37] ${
+                    (!isValidEmail || !isEmailAvailable) && email ? "border-red-500" : ""
+                  }`}
+                />
+                {!isValidEmail && email && (
+                  <p className="text-red-500 text-sm mt-1">Please enter a valid email address</p>
+                )}
+                {!isEmailAvailable && isValidEmail && email && mode === "signup" && (
+                  <p className="text-red-500 text-sm mt-1">Email is already registered</p>
+                )}
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="password" className="block text-left">
                   Password
@@ -671,23 +652,13 @@ export function AuthForm({ mode }: AuthFormProps) {
                         onChange={(token: string | null) => setCaptchaToken(token)}
                       />
                     </div>
-                    {mode === "login" ? (
-                      <Button
-                        onClick={handleWalletLogin}
-                        disabled={isLoading || !captchaToken}
-                        className="w-full bg-[#F6AD37] hover:bg-[#F6AD37]/90 text-white"
-                      >
-                        {isLoading ? "Logging in..." : "Login with Wallet"}
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={() => setIsWalletSignUpOpen(true)}
-                        disabled={isLoading || !captchaToken}
-                        className="w-full bg-[#F6AD37] hover:bg-[#F6AD37]/90 text-white"
-                      >
-                        Set Username
-                      </Button>
-                    )}
+                    <Button
+                      onClick={handleWalletLogin}
+                      disabled={isLoading || !captchaToken}
+                      className="w-full bg-[#F6AD37] hover:bg-[#F6AD37]/90 text-white"
+                    >
+                      {isLoading ? "Logging in..." : "Login with Wallet"}
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -745,13 +716,6 @@ export function AuthForm({ mode }: AuthFormProps) {
           </p>
         )}
       </div>
-      {isWalletSignUpOpen && (
-        <WalletSignUp
-          address={walletAddress!}
-          onClose={() => setIsWalletSignUpOpen(false)}
-          onSuccess={() => router.push("/task-manager")}
-        />
-      )}
     </div>
   )
 }

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
-import { getUserData, verifyPassword } from "@/lib/ipfs"
+import bcrypt from "bcryptjs"
+import clientPromise from "@/lib/mongodb"
 import { cookies } from "next/headers"
 
 export async function POST(req: Request) {
   try {
-    const { identifier, password, captchaToken, walletAddress } = await req.json()
+    const { email, password, captchaToken } = await req.json()
 
     // Verify ReCAPTCHA
     const recaptchaResponse = await fetch("https://www.google.com/recaptcha/api/siteverify", {
@@ -20,31 +21,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid ReCAPTCHA" }, { status: 400 })
     }
 
-    let userData
+    const client = await clientPromise
+    const db = client.db("atm_database")
 
-    if (walletAddress) {
-      // Wallet-based login
-      userData = await getUserData(walletAddress)
-      if (!userData) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 })
-      }
-    } else {
-      // Email-based login
-      userData = await getUserData(identifier)
-      if (!userData) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 })
-      }
+    // Find user by email
+    const user = await db.collection("users").findOne({ email })
 
-      // Verify password
-      const isValid = await verifyPassword(password, userData.password!)
-      if (!isValid) {
-        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
-      }
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // Check password
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+
+    if (!isPasswordValid) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
     // Set session cookie
     const cookieStore = cookies()
-    cookieStore.set("user_session", userData.username, {
+    cookieStore.set("user_session", user.username, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
@@ -53,11 +49,16 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      username: userData.username,
+      message: "Logged in successfully",
     })
   } catch (error) {
     console.error("Login error:", error)
-    return NextResponse.json({ error: "Login failed" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Login failed",
+      },
+      { status: 500 },
+    )
   }
 }
 

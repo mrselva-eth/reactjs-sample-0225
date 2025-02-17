@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server"
-import { storeUserData, getUserData } from "@/lib/ipfs"
-import { Magic } from "@magic-sdk/admin"
-
-if (!process.env.MAGIC_SECRET_KEY) {
-  throw new Error("MAGIC_SECRET_KEY is not defined in the environment variables")
-}
-
-const magic = new Magic(process.env.MAGIC_SECRET_KEY)
+import bcrypt from "bcryptjs"
+import clientPromise from "@/lib/mongodb"
 
 export async function POST(req: Request) {
   try {
-    const { username, email, password, captchaToken, didToken } = await req.json()
+    const { username, email, password, captchaToken } = await req.json()
 
     // Verify ReCAPTCHA
     const recaptchaResponse = await fetch("https://www.google.com/recaptcha/api/siteverify", {
@@ -26,50 +20,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid ReCAPTCHA" }, { status: 400 })
     }
 
-    // Verify Magic DID token
-    if (!didToken) {
-      console.error("DID token is missing")
-      return NextResponse.json({ error: "Authentication token is missing" }, { status: 400 })
-    }
+    const client = await clientPromise
+    const db = client.db("atm_database")
 
-    try {
-      const metadata = await magic.users.getMetadataByToken(didToken)
-      console.log("Magic Metadata:", metadata) // Log the metadata for debugging
-      if (metadata.email !== email) {
-        return NextResponse.json({ error: "Email verification failed" }, { status: 400 })
-      }
-    } catch (error) {
-      console.error("Magic token verification error:", error)
-      return NextResponse.json({ error: "Email verification failed. Please try again." }, { status: 400 })
-    }
+    // Check if username or email already exists
+    const existingUser = await db.collection("users").findOne({
+      $or: [{ username }, { email }],
+    })
 
-    try {
-      // Check for existing username/email before storing
-      const existingUserByUsername = await getUserData(username)
-      if (existingUserByUsername) {
+    if (existingUser) {
+      if (existingUser.username === username) {
         return NextResponse.json({ error: "Username already taken" }, { status: 400 })
       }
-
-      const existingUserByEmail = await getUserData(email)
-      if (existingUserByEmail) {
+      if (existingUser.email === email) {
         return NextResponse.json({ error: "Email already registered" }, { status: 400 })
       }
-
-      // Store user data in IPFS only after email verification
-      const ipfsHash = await storeUserData({ username, email, password, createdAt: new Date().toISOString() })
-
-      return NextResponse.json({
-        success: true,
-        message: "Signup successful!",
-        ipfsHash,
-      })
-    } catch (error) {
-      // Handle specific error messages from storeUserData
-      if (error instanceof Error) {
-        return NextResponse.json({ error: error.message }, { status: 400 })
-      }
-      throw error
     }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    // Create new user
+    const newUser = {
+      username,
+      email,
+      password: hashedPassword,
+      method: "email",
+      createdAt: new Date(),
+      tasks: [],
+    }
+
+    await db.collection("users").insertOne(newUser)
+
+    return NextResponse.json({
+      success: true,
+      message: "User created successfully",
+    })
   } catch (error) {
     console.error("Signup error:", error)
     return NextResponse.json(

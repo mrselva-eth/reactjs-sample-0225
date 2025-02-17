@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getUserData } from "@/lib/ipfs"
+import clientPromise from "@/lib/mongodb"
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -28,11 +28,15 @@ export async function GET(req: Request) {
   }
 
   try {
-    const userData = await getUserData(email)
+    const client = await clientPromise
+    const db = client.db("atm_database")
+
+    const existingUser = await db.collection("users").findOne({ email })
+
     return NextResponse.json(
       {
-        available: !userData,
-        message: userData ? "Email already registered" : "Email available",
+        available: !existingUser,
+        message: existingUser ? "Email already registered" : "Email available",
       },
       {
         headers: {
